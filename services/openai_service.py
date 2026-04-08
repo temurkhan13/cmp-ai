@@ -1,19 +1,19 @@
-"""Async OpenAI GPT wrapper — singleton client."""
+"""Async Claude (Anthropic) wrapper — singleton client."""
 
 import os
 import logging
-from openai import AsyncOpenAI
+from anthropic import AsyncAnthropic
 
 logger = logging.getLogger(__name__)
 
-_client: AsyncOpenAI | None = None
-MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
+_client: AsyncAnthropic | None = None
+MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-20250514")
 
 
-def get_client() -> AsyncOpenAI:
+def get_client() -> AsyncAnthropic:
     global _client
     if _client is None:
-        _client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        _client = AsyncAnthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
     return _client
 
 
@@ -24,8 +24,8 @@ async def chat_completion(
     temperature: float = 0.7,
     max_tokens: int = 4096,
 ) -> str:
-    """Send a chat completion request and return the assistant message."""
-    messages = [{"role": "system", "content": system_prompt}]
+    """Send a message to Claude and return the assistant response."""
+    messages = []
 
     if history:
         for i, msg in enumerate(history):
@@ -36,15 +36,17 @@ async def chat_completion(
 
     messages.append({"role": "user", "content": user_message})
 
-    logger.info("OpenAI request: model=%s, messages=%d", MODEL, len(messages))
+    logger.info("Claude request: model=%s, messages=%d", MODEL, len(messages))
 
-    response = await get_client().chat.completions.create(
+    response = await get_client().messages.create(
         model=MODEL,
+        system=system_prompt,
         messages=messages,
         temperature=temperature,
         max_tokens=max_tokens,
     )
 
-    content = response.choices[0].message.content
-    logger.info("OpenAI response: tokens=%s", response.usage.total_tokens if response.usage else "?")
+    content = response.content[0].text
+    logger.info("Claude response: input=%s, output=%s tokens",
+                response.usage.input_tokens, response.usage.output_tokens)
     return content

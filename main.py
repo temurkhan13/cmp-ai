@@ -1,4 +1,4 @@
-"""CMP AI Service — FastAPI application with 20 AI endpoints."""
+"""CMP AI Service — FastAPI application with AI + RAG endpoints."""
 
 import os
 import logging
@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from services import text_service, chat_service, assessment_service, sitemap_service, pdf_service
+from services import text_service, chat_service, assessment_service, sitemap_service, pdf_service, embedding_service
 
 # Logging
 logging.basicConfig(
@@ -23,16 +23,24 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if not os.getenv("OPENAI_API_KEY"):
-        logger.warning("OPENAI_API_KEY not set — AI calls will fail")
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        logger.warning("ANTHROPIC_API_KEY not set — AI calls will fail")
     else:
-        logger.info("OpenAI API key configured")
+        logger.info("Anthropic API key configured (Claude Sonnet)")
+    if not os.getenv("GOOGLE_API_KEY"):
+        logger.warning("GOOGLE_API_KEY not set — embeddings will fail")
+    else:
+        logger.info("Google API key configured (Gemini Embeddings)")
+    if not os.getenv("SUPABASE_URL"):
+        logger.warning("SUPABASE_URL not set — RAG disabled")
+    else:
+        logger.info("Supabase configured for RAG/pgvector")
     logger.info("CMP AI Service starting up")
     yield
     logger.info("CMP AI Service shutting down")
 
 
-app = FastAPI(title="CMP AI Service", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="CMP AI Service", version="2.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -61,6 +69,7 @@ class InspireRequest(BaseModel):
     history: list[str] = Field(default_factory=list)
     general_info: str = ""
     bussiness_info: str = ""
+    user_id: str = ""
 
 class AssessmentRequest(BaseModel):
     userId: str = ""
@@ -108,6 +117,19 @@ class PdfRequest(BaseModel):
     user_id: str = ""
     chat_id: str = ""
 
+class IngestRequest(BaseModel):
+    user_id: str
+    workspace_id: str = ""
+    folder_id: str = ""
+    filename: str
+    content: str
+
+class SearchRequest(BaseModel):
+    user_id: str
+    query: str
+    limit: int = 5
+    workspace_id: str | None = None
+
 class MessageResponse(BaseModel):
     message: str
 
@@ -121,7 +143,40 @@ class AssessmentResponse(BaseModel):
 @app.get("/health")
 @app.post("/health")
 async def health():
-    return {"status": "healthy"}
+    return {"status": "healthy", "version": "2.0.0", "llm": "claude-sonnet", "embeddings": "gemini"}
+
+
+# ── RAG: Ingest & Search ────────────────────────────────────────────
+
+@app.post("/ingest")
+async def ingest(req: IngestRequest):
+    try:
+        result = await embedding_service.ingest_document(
+            user_id=req.user_id,
+            workspace_id=req.workspace_id,
+            folder_id=req.folder_id,
+            filename=req.filename,
+            content=req.content,
+        )
+        return result
+    except Exception as e:
+        logger.error("Ingest error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/search")
+async def search(req: SearchRequest):
+    try:
+        results = await embedding_service.search_similar(
+            user_id=req.user_id,
+            query=req.query,
+            limit=req.limit,
+            workspace_id=req.workspace_id,
+        )
+        return {"results": results, "count": len(results)}
+    except Exception as e:
+        logger.error("Search error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── Chat ─────────────────────────────────────────────────────────────
@@ -129,7 +184,7 @@ async def health():
 @app.post("/chat", response_model=MessageResponse)
 async def chat_endpoint(req: ChatRequest):
     try:
-        result = await chat_service.chat(req.message, history=req.history)
+        result = await chat_service.chat(req.message, history=req.history, user_id=req.user_id)
         return {"message": result}
     except Exception as e:
         logger.error("Chat error: %s", e)
@@ -268,6 +323,7 @@ async def inspire(req: InspireRequest):
             history=req.history,
             general_info=req.general_info,
             bussiness_info=req.bussiness_info,
+            user_id=req.user_id,
         )
         return {"message": result}
     except Exception as e:
@@ -281,12 +337,14 @@ async def inspire(req: InspireRequest):
 async def assessment_chat(req: AssessmentRequest):
     try:
         biz_info = req.business_info or req.bussiness_info
+        uid = req.userId or req.user_id
         result = await assessment_service.assessment_chat(
             message=req.message,
             history=req.history,
             general_info=req.general_info,
             business_info=biz_info,
             assessment_name=req.assessment_name,
+            user_id=uid,
         )
         return result
     except Exception as e:
@@ -302,6 +360,7 @@ async def survey_chat(req: SurveyRequest):
             history=req.history,
             general_info=req.general_info,
             survey_type=req.survey_type,
+            user_id=req.user_id,
         )
         return {"message": result}
     except Exception as e:
@@ -318,6 +377,7 @@ async def check_chat(req: CheckRequest):
             general_info=req.general_info,
             check_type=req.check_type,
             bussiness_info=req.bussiness_info,
+            user_id=req.user_id,
         )
         return {"message": result}
     except Exception as e:
