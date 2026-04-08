@@ -8,7 +8,7 @@ from supabase import create_client, Client
 logger = logging.getLogger(__name__)
 
 _supabase: Client | None = None
-EMBEDDING_MODEL = "models/text-embedding-004"
+EMBEDDING_MODEL = "models/gemini-embedding-2-preview"
 EMBEDDING_DIMENSIONS = 1536
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 200
