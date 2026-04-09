@@ -34,7 +34,7 @@ async def chat_completion(
             role = "user" if i % 2 == 0 else "assistant"
             messages.append({"role": role, "content": msg})
 
-    messages.append({"role": "user", "content": user_message})
+    messages.append({"role": "user", "content": user_message or "Begin the assessment. Ask me the first question."})
 
     logger.info("Claude request: model=%s, messages=%d", MODEL, len(messages))
 
