@@ -61,8 +61,13 @@ class ChatRequest(BaseModel):
 
 class TextRequest(BaseModel):
     text: str = ""
+    message: str = ""
     tone: str = "Professional"
     language: str = "English"
+
+    @property
+    def content(self) -> str:
+        return self.text or self.message or ""
 
 class InspireRequest(BaseModel):
     message: str = ""
@@ -206,7 +211,7 @@ async def upload_files(req: PdfRequest):
 @app.post("/change-tone", response_model=MessageResponse)
 async def change_tone(req: TextRequest):
     try:
-        result = await text_service.change_tone(req.text, req.tone)
+        result = await text_service.change_tone(req.content, req.tone)
         return {"message": result}
     except Exception as e:
         logger.error("Change tone error: %s", e)
@@ -216,7 +221,7 @@ async def change_tone(req: TextRequest):
 @app.post("/translate", response_model=MessageResponse)
 async def translate(req: TextRequest):
     try:
-        result = await text_service.translate(req.text, req.language)
+        result = await text_service.translate(req.content, req.language)
         return {"message": result}
     except Exception as e:
         logger.error("Translate error: %s", e)
@@ -226,7 +231,7 @@ async def translate(req: TextRequest):
 @app.post("/improve-writing", response_model=MessageResponse)
 async def improve_writing(req: TextRequest):
     try:
-        result = await text_service.improve_writing(req.text)
+        result = await text_service.improve_writing(req.content)
         return {"message": result}
     except Exception as e:
         logger.error("Improve writing error: %s", e)
@@ -236,7 +241,7 @@ async def improve_writing(req: TextRequest):
 @app.post("/fix-grammar", response_model=MessageResponse)
 async def fix_grammar(req: TextRequest):
     try:
-        result = await text_service.fix_grammar(req.text)
+        result = await text_service.fix_grammar(req.content)
         return {"message": result}
     except Exception as e:
         logger.error("Fix grammar error: %s", e)
@@ -246,7 +251,7 @@ async def fix_grammar(req: TextRequest):
 @app.post("/make-shorter", response_model=MessageResponse)
 async def make_shorter(req: TextRequest):
     try:
-        result = await text_service.make_shorter(req.text)
+        result = await text_service.make_shorter(req.content)
         return {"message": result}
     except Exception as e:
         logger.error("Make shorter error: %s", e)
@@ -256,7 +261,7 @@ async def make_shorter(req: TextRequest):
 @app.post("/make-longer", response_model=MessageResponse)
 async def make_longer(req: TextRequest):
     try:
-        result = await text_service.make_longer(req.text)
+        result = await text_service.make_longer(req.content)
         return {"message": result}
     except Exception as e:
         logger.error("Make longer error: %s", e)
@@ -266,7 +271,7 @@ async def make_longer(req: TextRequest):
 @app.post("/simplify-language", response_model=MessageResponse)
 async def simplify_language(req: TextRequest):
     try:
-        result = await text_service.simplify_language(req.text)
+        result = await text_service.simplify_language(req.content)
         return {"message": result}
     except Exception as e:
         logger.error("Simplify error: %s", e)
@@ -276,7 +281,7 @@ async def simplify_language(req: TextRequest):
 @app.post("/summarize", response_model=MessageResponse)
 async def summarize(req: TextRequest):
     try:
-        result = await text_service.summarize(req.text)
+        result = await text_service.summarize(req.content)
         return {"message": result}
     except Exception as e:
         logger.error("Summarize error: %s", e)
@@ -286,7 +291,7 @@ async def summarize(req: TextRequest):
 @app.post("/explain-this", response_model=MessageResponse)
 async def explain_this(req: TextRequest):
     try:
-        result = await text_service.explain_this(req.text)
+        result = await text_service.explain_this(req.content)
         return {"message": result}
     except Exception as e:
         logger.error("Explain error: %s", e)
@@ -296,7 +301,7 @@ async def explain_this(req: TextRequest):
 @app.post("/comprehensive-text", response_model=MessageResponse)
 async def comprehensive_text(req: TextRequest):
     try:
-        result = await text_service.comprehensive_text(req.text)
+        result = await text_service.comprehensive_text(req.content)
         return {"message": result}
     except Exception as e:
         logger.error("Comprehensive error: %s", e)
@@ -306,7 +311,7 @@ async def comprehensive_text(req: TextRequest):
 @app.post("/auto-text", response_model=MessageResponse)
 async def auto_text(req: TextRequest):
     try:
-        result = await text_service.auto_text(req.text)
+        result = await text_service.auto_text(req.content)
         return {"message": result}
     except Exception as e:
         logger.error("Auto text error: %s", e)
