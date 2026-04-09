@@ -2,12 +2,14 @@
 
 import os
 import logging
-import google.generativeai as genai
+from google import genai
+from google.genai.types import EmbedContentConfig
 from supabase import create_client, Client
 
 logger = logging.getLogger(__name__)
 
 _supabase: Client | None = None
+_genai_client: genai.Client | None = None
 EMBEDDING_MODEL = "models/gemini-embedding-2-preview"
 EMBEDDING_DIMENSIONS = 1536
 CHUNK_SIZE = 1000
@@ -24,32 +26,39 @@ def get_supabase() -> Client:
     return _supabase
 
 
-def _configure_gemini():
-    genai.configure(api_key=os.getenv("GOOGLE_API_KEY", ""))
+def _get_genai_client() -> genai.Client:
+    global _genai_client
+    if _genai_client is None:
+        _genai_client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY", ""))
+    return _genai_client
 
 
 def embed_text(text: str) -> list[float]:
     """Generate embedding for a single text using Gemini."""
-    _configure_gemini()
-    result = genai.embed_content(
+    client = _get_genai_client()
+    result = client.models.embed_content(
         model=EMBEDDING_MODEL,
-        content=text,
-        task_type="retrieval_document",
-        output_dimensionality=EMBEDDING_DIMENSIONS,
+        contents=text,
+        config=EmbedContentConfig(
+            task_type="RETRIEVAL_DOCUMENT",
+            output_dimensionality=EMBEDDING_DIMENSIONS,
+        ),
     )
-    return result["embedding"]
+    return result.embeddings[0].values
 
 
 def embed_query(text: str) -> list[float]:
     """Generate embedding for a search query using Gemini."""
-    _configure_gemini()
-    result = genai.embed_content(
+    client = _get_genai_client()
+    result = client.models.embed_content(
         model=EMBEDDING_MODEL,
-        content=text,
-        task_type="retrieval_query",
-        output_dimensionality=EMBEDDING_DIMENSIONS,
+        contents=text,
+        config=EmbedContentConfig(
+            task_type="RETRIEVAL_QUERY",
+            output_dimensionality=EMBEDDING_DIMENSIONS,
+        ),
     )
-    return result["embedding"]
+    return result.embeddings[0].values
 
 
 def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
