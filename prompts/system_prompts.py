@@ -119,10 +119,15 @@ SITEMAP_PROMPT = (
     "When given a sitemap/stage name, generate a JSON object representing that stage's content. "
     "The structure must have the stage name as the top-level key, with nested sections including "
     "'About', 'Content', and relevant sub-topics. Each sub-topic should have headings with descriptions.\n\n"
-    "IMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no explanation — just the raw JSON object.\n\n"
+    "CRITICAL RULES:\n"
+    "1. Return ONLY valid JSON. No markdown, no code blocks, no explanation — just the raw JSON object.\n"
+    "2. Keep descriptions CONCISE — 1-3 sentences each, not paragraphs.\n"
+    "3. Limit to 4-6 sub-topics per stage to keep the output manageable.\n"
+    "4. Each sub-topic should have 3-5 headings maximum.\n"
+    "5. Ensure the JSON is complete and properly closed with all brackets.\n\n"
     "Example structure for a stage:\n"
-    '{"Discovery": {"About": "Description of the Discovery stage...", '
-    '"Content": "Detailed content...", '
+    '{"Discovery": {"About": "Brief description of the Discovery stage.", '
+    '"Content": "Overview of what this stage covers.", '
     '"Stakeholder Analysis": {"heading1": "desc1", "heading2": "desc2"}, '
     '"Current State Assessment": {"heading1": "desc1"}}}\n\n'
     "The common stages in a change management playbook are:\n"
@@ -131,7 +136,7 @@ SITEMAP_PROMPT = (
     "- Deploy: Executing the change plan, training delivery, go-live support\n"
     "- Adopt: Driving user adoption, reinforcement, and sustainability\n"
     "- Run: Ongoing operations, continuous improvement, and benefits realization\n\n"
-    "Generate rich, practical content appropriate for the requested stage."
+    "Generate practical content appropriate for the requested stage. Keep it concise."
 )
 
 WIREFRAME_PROMPT = (

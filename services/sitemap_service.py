@@ -10,11 +10,30 @@ logger = logging.getLogger(__name__)
 
 
 def _extract_json(text: str) -> str:
-    """Strip markdown code fences and extract JSON."""
+    """Strip markdown code fences and extract valid JSON."""
     # Remove ```json ... ``` or ``` ... ```
     cleaned = re.sub(r"```(?:json)?\s*", "", text)
     cleaned = re.sub(r"```\s*$", "", cleaned.strip())
-    return cleaned.strip()
+    cleaned = cleaned.strip()
+
+    # Find the first { and try to find matching }
+    start = cleaned.find("{")
+    if start == -1:
+        return cleaned
+
+    # Walk through to find the matching closing brace
+    depth = 0
+    end = start
+    for i in range(start, len(cleaned)):
+        if cleaned[i] == "{":
+            depth += 1
+        elif cleaned[i] == "}":
+            depth -= 1
+            if depth == 0:
+                end = i + 1
+                break
+
+    return cleaned[start:end]
 
 
 async def generate_sitemap(message: str, sitemap_name: str) -> dict:
@@ -22,7 +41,7 @@ async def generate_sitemap(message: str, sitemap_name: str) -> dict:
     if message:
         user_msg += f"\n\nAdditional context: {message}"
 
-    result = await chat_completion(SITEMAP_PROMPT, user_msg, temperature=0.7)
+    result = await chat_completion(SITEMAP_PROMPT, user_msg, temperature=0.7, max_tokens=2048)
 
     try:
         json_str = _extract_json(result)
