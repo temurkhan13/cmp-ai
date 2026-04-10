@@ -341,10 +341,39 @@ ASSESSMENT_PROMPTS = {
 }
 
 
+_NAME_MAP = {
+    "Change Vision/Case for Change": "CHANGE_VISION_CASE",
+    "Change Approach/Strategy": "CHANGE_APPROACH_STRATEGY",
+    "Change Impact Assessment": "CHANGE_IMPACT_ASSESSMENT",
+    "Stakeholder Assessment/Map": "STAKEHOLDER_ASSESSMENT_MAP",
+    "Training Needs Assessment": "TRAINING_NEEDS_ASSESSMENT",
+    "Transition to Sustain": "TRANSITION_TO_SUSTAIN",
+    "ADKAR Assessment": "ADKAR_ASSESSMENT",
+    "What's Changing and What is Not - Summary": "WHATS_CHANGING_SUMMARY",
+    "Training Plan": "TRAINING_PLAN",
+    "Communications Plan": "COMMUNICATIONS_PLAN",
+    "Engagement & Change Plan": "ENGAGEMENT_CHANGE_PLAN",
+    "Readiness Assessment": "READINESS_ASSESSMENT",
+    "Health Check": "HEALTH_CHECK",
+    "Managing Resistance": "MANAGING_RESISTANCE",
+    "Key Messages by Stakeholder Group": "KEY_MESSAGES_BY_GROUP",
+    "Briefing Messages": "BRIEFING_MESSAGES",
+    "Communications Messages": "COMMUNICATIONS_MESSAGES",
+    "FAQ's": "FAQS",
+    "Champions Survey": "CHAMPIONS_SURVEY",
+    "User Feedback Survey": "USER_FEEDBACK_SURVEY",
+    "Training Feedback Survey": "TRAINING_FEEDBACK_SURVEY",
+    "Post Go Live Feedback Survey": "POST_GO_LIVE_FEEDBACK",
+    "Change KPIs/User Adoption Statistics": "CHANGE_KPIS_USER_ADOPTION",
+    "Benefits": "BENEFITS",
+}
+
+
 def get_assessment_prompt(assessment_name: str) -> str:
     """Get the system prompt for a given assessment type."""
+    key = _NAME_MAP.get(assessment_name, assessment_name)
     return ASSESSMENT_PROMPTS.get(
-        assessment_name,
+        key,
         _BASE + f"ASSESSMENT TYPE: {assessment_name}\n"
         "Conduct a thorough assessment by asking relevant questions and generating a detailed report."
     )
