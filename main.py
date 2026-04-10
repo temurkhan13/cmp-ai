@@ -110,6 +110,11 @@ class SitemapRequest(BaseModel):
     message: str = ""
     sitemap_name: str = ""
 
+class PlaybookInspireRequest(BaseModel):
+    user_id: str = ""
+    heading: str = ""
+    playbook_name: str = ""
+
 class WireframeRequest(BaseModel):
     user_id: str = ""
     chat_id: str = ""
@@ -391,6 +396,19 @@ async def check_chat(req: CheckRequest):
 
 
 # ── Sitemap & Wireframe ──────────────────────────────────────────────
+
+@app.post("/playbook-inspire")
+async def playbook_inspire(req: PlaybookInspireRequest):
+    try:
+        result = await sitemap_service.playbook_inspire(
+            heading=req.heading,
+            playbook_name=req.playbook_name,
+        )
+        return result
+    except Exception as e:
+        logger.error("Playbook inspire error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/sitemap")
 async def sitemap(req: SitemapRequest):

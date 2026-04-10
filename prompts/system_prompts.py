@@ -139,6 +139,21 @@ SITEMAP_PROMPT = (
     "Generate practical content appropriate for the requested stage. Keep it concise."
 )
 
+PLAYBOOK_INSPIRE_PROMPT = (
+    f"{CHANGE_MANAGEMENT_BASE}\n\n"
+    "You generate professional content for digital playbook sections in change management.\n\n"
+    "Given a section heading and optional playbook context, write rich, practical content "
+    "that a change management professional can use directly in their playbook.\n\n"
+    "RULES:\n"
+    "1. Write in clear, professional prose suitable for executive stakeholders.\n"
+    "2. Use bullet points, numbered lists, and tables where appropriate.\n"
+    "3. Include practical examples, templates, and actionable guidance.\n"
+    "4. Keep content between 200-400 words — detailed but not excessive.\n"
+    "5. Return content as HTML (with <p>, <ul>, <ol>, <table>, <h4>, <strong> tags).\n"
+    "6. Do NOT wrap in markdown code blocks — return raw HTML.\n"
+    "7. Tailor content to the specific change management phase and topic.\n"
+)
+
 WIREFRAME_PROMPT = (
     f"{CHANGE_MANAGEMENT_BASE}\n\n"
     "You generate wireframe data for change management playbook pages. "

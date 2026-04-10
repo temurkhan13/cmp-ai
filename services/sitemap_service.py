@@ -3,7 +3,7 @@
 import json
 import re
 import logging
-from prompts.system_prompts import SITEMAP_PROMPT, WIREFRAME_PROMPT
+from prompts.system_prompts import SITEMAP_PROMPT, WIREFRAME_PROMPT, PLAYBOOK_INSPIRE_PROMPT
 from .openai_service import chat_completion
 
 logger = logging.getLogger(__name__)
@@ -50,6 +50,15 @@ async def generate_sitemap(message: str, sitemap_name: str) -> dict:
     except json.JSONDecodeError:
         logger.warning("Sitemap response was not valid JSON, wrapping as string")
         return {"message": result}
+
+
+async def playbook_inspire(heading: str, playbook_name: str = "") -> dict:
+    user_msg = f"Generate content for the playbook section: {heading}"
+    if playbook_name:
+        user_msg += f"\n\nThis is part of the playbook: {playbook_name}"
+
+    result = await chat_completion(PLAYBOOK_INSPIRE_PROMPT, user_msg, temperature=0.7, max_tokens=1024)
+    return {"content": result, "message": result}
 
 
 async def generate_wireframe(
