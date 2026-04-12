@@ -7,11 +7,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field, model_validator
 
 from services import text_service, chat_service, assessment_service, sitemap_service, pdf_service, embedding_service
+from services.openai_service import get_client, MODEL
 
 # Logging
 logging.basicConfig(
@@ -40,7 +42,7 @@ async def lifespan(app: FastAPI):
     logger.info("CMP AI Service shutting down")
 
 
-app = FastAPI(title="CMP AI Service", version="2.0.0", lifespan=lifespan)
+app = FastAPI(title="CMP AI Service", version="2.1.0", lifespan=lifespan)
 
 ALLOWED_ORIGINS = [
     "https://cmp-frontend-gamma.vercel.app",
@@ -78,6 +80,7 @@ class ChatRequest(BaseModel):
     chat_id: str = ""
     message: str = ""
     history: list[str] = Field(default_factory=list)
+    stream: bool = False
 
 class TextRequest(BaseModel):
     text: str = ""
@@ -93,8 +96,13 @@ class InspireRequest(BaseModel):
     message: str = ""
     history: list[str] = Field(default_factory=list)
     general_info: str = ""
-    bussiness_info: str = ""
+    business_info: str = ""
+    bussiness_info: str = ""  # Legacy typo alias
     user_id: str = ""
+
+    @property
+    def biz_info(self) -> str:
+        return self.business_info or self.bussiness_info
 
 class AssessmentRequest(BaseModel):
     userId: str = ""
@@ -104,8 +112,17 @@ class AssessmentRequest(BaseModel):
     history: list[str] = Field(default_factory=list)
     general_info: str = ""
     business_info: str = ""
-    bussiness_info: str = ""
+    bussiness_info: str = ""  # Legacy typo alias
     assessment_name: str = ""
+    stream: bool = False
+
+    @property
+    def biz_info(self) -> str:
+        return self.business_info or self.bussiness_info
+
+    @property
+    def uid(self) -> str:
+        return self.userId or self.user_id
 
 class SurveyRequest(BaseModel):
     user_id: str = ""
@@ -122,7 +139,12 @@ class CheckRequest(BaseModel):
     history: list[str] = Field(default_factory=list)
     general_info: str = ""
     check_type: str = ""
-    bussiness_info: str = ""
+    business_info: str = ""
+    bussiness_info: str = ""  # Legacy typo alias
+
+    @property
+    def biz_info(self) -> str:
+        return self.business_info or self.bussiness_info
 
 class SitemapRequest(BaseModel):
     user_id: str = ""
@@ -144,6 +166,7 @@ class WireframeRequest(BaseModel):
 
 class PdfRequest(BaseModel):
     pdf_file: str = ""
+    pdf_base64: str = ""  # New: accept base64 encoded PDF
     user_id: str = ""
     chat_id: str = ""
 
@@ -168,12 +191,38 @@ class AssessmentResponse(BaseModel):
     title: str | None = None
 
 
+# ── SSE Streaming Helper ────────────────────────────────────────────
+
+async def _stream_response(system_prompt: str, user_message: str, history: list[str] | None = None):
+    """Generator that yields SSE events from Claude streaming response."""
+    from services.openai_service import _build_history_messages, _truncate_history
+
+    messages = _build_history_messages(history)
+    messages.append({"role": "user", "content": user_message or "Please proceed."})
+    messages = _truncate_history(messages)
+
+    async with get_client().messages.stream(
+        model=MODEL,
+        system=[{
+            "type": "text",
+            "text": system_prompt,
+            "cache_control": {"type": "ephemeral"},
+        }],
+        messages=messages,
+        temperature=0.7,
+        max_tokens=8192,
+    ) as stream:
+        async for text in stream.text_stream:
+            yield f"data: {text}\n\n"
+    yield "data: [DONE]\n\n"
+
+
 # ── Health ───────────────────────────────────────────────────────────
 
 @app.get("/health")
 @app.post("/health")
 async def health():
-    return {"status": "healthy", "version": "2.0.0", "llm": "claude-sonnet", "embeddings": "gemini"}
+    return {"status": "healthy", "version": "2.1.0", "llm": "claude-sonnet", "embeddings": "gemini"}
 
 
 # ── RAG: Ingest & Search ────────────────────────────────────────────
@@ -211,9 +260,15 @@ async def search(req: SearchRequest):
 
 # ── Chat ─────────────────────────────────────────────────────────────
 
-@app.post("/chat", response_model=MessageResponse)
+@app.post("/chat")
 async def chat_endpoint(req: ChatRequest):
     try:
+        if req.stream:
+            from prompts.system_prompts import CHAT_SYSTEM_PROMPT
+            return StreamingResponse(
+                _stream_response(CHAT_SYSTEM_PROMPT, req.message, req.history),
+                media_type="text/event-stream",
+            )
         result = await chat_service.chat(req.message, history=req.history, user_id=req.user_id)
         return {"message": result}
     except Exception as e:
@@ -224,7 +279,12 @@ async def chat_endpoint(req: ChatRequest):
 @app.post("/upload-files", response_model=MessageResponse)
 async def upload_files(req: PdfRequest):
     try:
-        # Path traversal protection — only allow files in uploads directory
+        # Support base64 PDF (preferred) or file path (legacy)
+        if req.pdf_base64:
+            result = await pdf_service.analyze_pdf_base64(req.pdf_base64)
+            return {"message": result}
+
+        # Legacy file path mode — with path traversal protection
         import pathlib
         allowed_dir = pathlib.Path("public/uploads").resolve()
         file_path = pathlib.Path(req.pdf_file).resolve()
@@ -360,7 +420,7 @@ async def inspire(req: InspireRequest):
             req.message,
             history=req.history,
             general_info=req.general_info,
-            bussiness_info=req.bussiness_info,
+            bussiness_info=req.biz_info,
             user_id=req.user_id,
         )
         return {"message": result}
@@ -371,18 +431,24 @@ async def inspire(req: InspireRequest):
 
 # ── Assessments ──────────────────────────────────────────────────────
 
-@app.post("/assesment-chat", response_model=AssessmentResponse)
+@app.post("/assesment-chat")
 async def assessment_chat(req: AssessmentRequest):
     try:
-        biz_info = req.business_info or req.bussiness_info
-        uid = req.userId or req.user_id
+        if req.stream:
+            from prompts.assessment_prompts import get_assessment_prompt
+            system_prompt = get_assessment_prompt(req.assessment_name)
+            return StreamingResponse(
+                _stream_response(system_prompt, req.message, req.history),
+                media_type="text/event-stream",
+            )
+
         result = await assessment_service.assessment_chat(
             message=req.message,
             history=req.history,
             general_info=req.general_info,
-            business_info=biz_info,
+            business_info=req.biz_info,
             assessment_name=req.assessment_name,
-            user_id=uid,
+            user_id=req.uid,
         )
         return result
     except Exception as e:
@@ -414,7 +480,7 @@ async def check_chat(req: CheckRequest):
             history=req.history,
             general_info=req.general_info,
             check_type=req.check_type,
-            bussiness_info=req.bussiness_info,
+            bussiness_info=req.biz_info,
             user_id=req.user_id,
         )
         return {"message": result}

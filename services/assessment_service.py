@@ -1,4 +1,4 @@
-"""Assessment Q&A, survey, and check-chat services — now with RAG context."""
+"""Assessment Q&A, survey, and check-chat services — with RAG context."""
 
 from prompts.system_prompts import SURVEY_CHAT_PROMPT, CHECK_CHAT_PROMPT
 from prompts.assessment_prompts import get_assessment_prompt
@@ -39,7 +39,13 @@ async def assessment_chat(
     if context_parts:
         user_msg = "\n".join(context_parts) + f"\n\nUser response: {message}"
 
-    result = await chat_completion(system_prompt, user_msg, history=history)
+    result = await chat_completion(
+        system_prompt,
+        user_msg,
+        history=history,
+        max_tokens=8192,  # Assessment reports need more space
+        default_user_message="Begin the assessment. Ask me the first question.",
+    )
 
     response = {"message": result}
     if result.strip().startswith("## "):
@@ -57,6 +63,9 @@ async def survey_chat(
     survey_type: str = "",
     user_id: str = "",
 ) -> str:
+    if not survey_type or not survey_type.strip():
+        survey_type = "General Change Management Survey"
+
     prompt = SURVEY_CHAT_PROMPT.replace("{{survey_type}}", survey_type)
 
     if user_id:
@@ -72,7 +81,12 @@ async def survey_chat(
     if general_info:
         user_msg = f"Context: {general_info}\n\nUser message: {message}"
 
-    return await chat_completion(prompt, user_msg, history=history)
+    return await chat_completion(
+        prompt,
+        user_msg,
+        history=history,
+        default_user_message="Begin the survey. Ask me the first question.",
+    )
 
 
 async def check_chat(
@@ -83,6 +97,9 @@ async def check_chat(
     bussiness_info: str = "",
     user_id: str = "",
 ) -> str:
+    if not check_type or not check_type.strip():
+        check_type = "General Change Health Check"
+
     prompt = CHECK_CHAT_PROMPT.replace("{{check_type}}", check_type)
 
     if user_id:
@@ -104,4 +121,9 @@ async def check_chat(
     if context_parts:
         user_msg = "\n".join(context_parts) + f"\n\nUser message: {message}"
 
-    return await chat_completion(prompt, user_msg, history=history)
+    return await chat_completion(
+        prompt,
+        user_msg,
+        history=history,
+        default_user_message="Begin the check. Ask me the first question.",
+    )

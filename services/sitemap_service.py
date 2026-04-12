@@ -8,32 +8,76 @@ from .openai_service import chat_completion
 
 logger = logging.getLogger(__name__)
 
+# Basic HTML tags allowed in playbook content
+_ALLOWED_TAGS = {"p", "ul", "ol", "li", "table", "thead", "tbody", "tr", "th", "td",
+                 "h1", "h2", "h3", "h4", "h5", "h6", "strong", "em", "br", "a", "span", "div"}
 
-def _extract_json(text: str) -> str:
-    """Strip markdown code fences and extract valid JSON."""
-    # Remove ```json ... ``` or ``` ... ```
-    cleaned = re.sub(r"```(?:json)?\s*", "", text)
-    cleaned = re.sub(r"```\s*$", "", cleaned.strip())
-    cleaned = cleaned.strip()
 
-    # Find the first { and try to find matching }
+def _extract_json(text: str) -> dict:
+    """Robustly extract JSON from LLM response.
+    Tries multiple strategies: direct parse, code fence strip, brace matching.
+    """
+    text = text.strip()
+
+    # Strategy 1: Direct parse (works if LLM returned clean JSON)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # Strategy 2: Strip markdown code fences
+    cleaned = re.sub(r"^```(?:json)?\s*\n?", "", text)
+    cleaned = re.sub(r"\n?```\s*$", "", cleaned).strip()
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    # Strategy 3: Find JSON object boundaries with proper string handling
     start = cleaned.find("{")
     if start == -1:
-        return cleaned
+        raise json.JSONDecodeError("No JSON object found", cleaned, 0)
 
-    # Walk through to find the matching closing brace
+    # Use a state machine that respects string literals
     depth = 0
+    in_string = False
+    escape = False
     end = start
+
     for i in range(start, len(cleaned)):
-        if cleaned[i] == "{":
+        ch = cleaned[i]
+        if escape:
+            escape = False
+            continue
+        if ch == "\\":
+            escape = True
+            continue
+        if ch == '"' and not escape:
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
             depth += 1
-        elif cleaned[i] == "}":
+        elif ch == "}":
             depth -= 1
             if depth == 0:
                 end = i + 1
                 break
 
-    return cleaned[start:end]
+    extracted = cleaned[start:end]
+    return json.loads(extracted)
+
+
+def _sanitize_html(html: str) -> str:
+    """Basic HTML sanitization — strip tags not in the allowed set."""
+    def replace_tag(match):
+        tag_name = match.group(1).lower().strip().split()[0]  # Get tag name without attrs
+        if tag_name.lstrip("/") in _ALLOWED_TAGS:
+            return match.group(0)
+        return ""  # Strip disallowed tags
+
+    return re.sub(r"<(/?\w[^>]*)>", replace_tag, html)
 
 
 async def generate_sitemap(message: str, sitemap_name: str) -> dict:
@@ -44,11 +88,10 @@ async def generate_sitemap(message: str, sitemap_name: str) -> dict:
     result = await chat_completion(SITEMAP_PROMPT, user_msg, temperature=0.7, max_tokens=2048)
 
     try:
-        json_str = _extract_json(result)
-        parsed = json.loads(json_str)
+        parsed = _extract_json(result)
         return {"message": json.dumps(parsed)}
-    except json.JSONDecodeError:
-        logger.warning("Sitemap response was not valid JSON, wrapping as string")
+    except (json.JSONDecodeError, ValueError) as e:
+        logger.warning("Sitemap response was not valid JSON (%s), wrapping as string", e)
         return {"message": result}
 
 
@@ -58,7 +101,10 @@ async def playbook_inspire(heading: str, playbook_name: str = "") -> dict:
         user_msg += f"\n\nThis is part of the playbook: {playbook_name}"
 
     result = await chat_completion(PLAYBOOK_INSPIRE_PROMPT, user_msg, temperature=0.7, max_tokens=1024)
-    return {"content": result, "message": result}
+
+    # Sanitize HTML output before returning to frontend
+    sanitized = _sanitize_html(result)
+    return {"content": sanitized, "message": sanitized}
 
 
 async def generate_wireframe(
@@ -75,9 +121,8 @@ async def generate_wireframe(
     result = await chat_completion(WIREFRAME_PROMPT, user_msg, temperature=0.7)
 
     try:
-        json_str = _extract_json(result)
-        parsed = json.loads(json_str)
+        parsed = _extract_json(result)
         return parsed
-    except json.JSONDecodeError:
-        logger.warning("Wireframe response was not valid JSON, returning as-is")
+    except (json.JSONDecodeError, ValueError) as e:
+        logger.warning("Wireframe response was not valid JSON (%s), returning as-is", e)
         return {"message": result}
