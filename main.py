@@ -42,13 +42,33 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="CMP AI Service", version="2.0.0", lifespan=lifespan)
 
+ALLOWED_ORIGINS = [
+    "https://cmp-frontend-gamma.vercel.app",
+    "https://cmp-frontend-temurkhan13s-projects.vercel.app",
+    "https://cmp-frontend-git-main-temurkhan13s-projects.vercel.app",
+    "https://cmp-backend-830s.onrender.com",
+    "http://localhost:5173",
+    "http://localhost:3000",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Simple API key auth for all AI endpoints
+AI_API_KEY = os.getenv("AI_API_KEY", "")
+
+async def verify_api_key(request):
+    """Check X-API-Key header if AI_API_KEY is configured."""
+    if not AI_API_KEY:
+        return  # No key configured = allow (dev mode)
+    key = request.headers.get("x-api-key", "")
+    if key != AI_API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 
 # ── Request/Response Models ──────────────────────────────────────────
@@ -204,8 +224,16 @@ async def chat_endpoint(req: ChatRequest):
 @app.post("/upload-files", response_model=MessageResponse)
 async def upload_files(req: PdfRequest):
     try:
+        # Path traversal protection — only allow files in uploads directory
+        import pathlib
+        allowed_dir = pathlib.Path("public/uploads").resolve()
+        file_path = pathlib.Path(req.pdf_file).resolve()
+        if not str(file_path).startswith(str(allowed_dir)):
+            raise HTTPException(status_code=400, detail="Invalid file path")
         result = await pdf_service.analyze_pdf(req.pdf_file)
         return {"message": result}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("PDF analysis error: %s", e)
         raise HTTPException(status_code=500, detail=str(e))

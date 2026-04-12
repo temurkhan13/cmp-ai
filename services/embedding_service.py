@@ -33,8 +33,11 @@ def _get_genai_client() -> genai.Client:
     return _genai_client
 
 
-def embed_text(text: str) -> list[float]:
-    """Generate embedding for a single text using Gemini."""
+import asyncio
+import functools
+
+def _embed_text_sync(text: str) -> list[float]:
+    """Generate embedding for a single text using Gemini (sync)."""
     client = _get_genai_client()
     result = client.models.embed_content(
         model=EMBEDDING_MODEL,
@@ -47,8 +50,8 @@ def embed_text(text: str) -> list[float]:
     return result.embeddings[0].values
 
 
-def embed_query(text: str) -> list[float]:
-    """Generate embedding for a search query using Gemini."""
+def _embed_query_sync(text: str) -> list[float]:
+    """Generate embedding for a search query using Gemini (sync)."""
     client = _get_genai_client()
     result = client.models.embed_content(
         model=EMBEDDING_MODEL,
@@ -59,6 +62,18 @@ def embed_query(text: str) -> list[float]:
         ),
     )
     return result.embeddings[0].values
+
+
+async def embed_text(text: str) -> list[float]:
+    """Async wrapper — runs sync Gemini call in thread pool to avoid blocking event loop."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, functools.partial(_embed_text_sync, text))
+
+
+async def embed_query(text: str) -> list[float]:
+    """Async wrapper — runs sync Gemini call in thread pool."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, functools.partial(_embed_query_sync, text))
 
 
 def chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
@@ -100,7 +115,7 @@ async def ingest_document(
     logger.info("Ingesting document %s: %d chunks", filename, len(chunks))
 
     for i, chunk in enumerate(chunks):
-        embedding = embed_text(chunk)
+        embedding = await embed_text(chunk)
         sb.table("document_chunks").insert({
             "document_id": document_id,
             "user_id": user_id,
@@ -126,7 +141,7 @@ async def search_similar(
 ) -> list[dict]:
     """Search for similar document chunks using vector similarity."""
     sb = get_supabase()
-    query_embedding = embed_query(query)
+    query_embedding = await embed_query(query)
 
     # Call Supabase RPC function for vector similarity search
     result = sb.rpc("match_document_chunks", {
